@@ -2,6 +2,19 @@
 
 How to translate Figma variant properties (State, Size, Style/Type, content toggles) into SwiftUI constructs.
 
+## Contents
+
+- [Identifying Variants in MCP Output](#identifying-variants-in-mcp-output)
+- [State Variants](#state-variants)
+- [Size Variants](#size-variants)
+- [Style / Type Variants](#style--type-variants)
+- [Content Toggle Variants](#content-toggle-variants)
+- [Combined Variants](#combined-variants)
+- [Ask Before Choosing Architecture](#ask-before-choosing-architecture)
+- [Reusable Component Pattern](#reusable-component-pattern)
+- [Forms and Inputs](#forms-and-inputs)
+- [Variant Implementation Checklist](#variant-implementation-checklist)
+
 ## Identifying Variants in MCP Output
 
 Figma components use variant properties to define visual permutations. When `get_design_context` returns a component instance, look for:

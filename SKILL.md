@@ -1,6 +1,6 @@
 ---
 name: figma-to-swiftui
-description: Convert Figma designs to SwiftUI
+description: Convert Figma URLs, nodes, selections, or briefs into production SwiftUI for iOS using Figma MCP. Use for Figma-to-SwiftUI implementation, planning, design tokens, and asset export; not for web or React.
 ---
 
 # Figma to SwiftUI Implementation Skill
@@ -303,5 +303,5 @@ add_code_connect_map: Register new mappings. Use after creating reusable compone
 3. Use what the project uses. Check dependencies and existing patterns before implementing anything. Do not introduce native alternatives if the project already has a library for that purpose.
 4. Project tokens win. Prefer project tokens, adjust minimally for visual match.
 5. Validate only when asked. Ask the user how they want to validate before implementing.
-6. Prefer SF Symbols. Check before downloading custom icons. For cross-platform projects, list all icons with proposed matches and confirm each one with the user.
+6. Figma assets first. Use SF Symbols only for iOS system chrome or user-approved substitutions; never replace Figma-designed icons, logos, or illustrations by default.
 7. Platform conventions matter. iOS navigation, safe areas, Dynamic Type, accessibility are more important than pixel-perfect Figma replication.

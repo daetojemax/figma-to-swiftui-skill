@@ -2,6 +2,17 @@
 
 How to translate Figma variables (from get_variable_defs) into a SwiftUI design system.
 
+## Contents
+
+- [Color Tokens](#color-tokens)
+- [Spacing Tokens](#spacing-tokens)
+- [Typography Tokens](#typography-tokens)
+- [Border Radius Tokens](#border-radius-tokens)
+- [Shadow Tokens](#shadow-tokens)
+- [Gradients](#gradients)
+- [Opacity](#opacity)
+- [General Rules](#general-rules)
+
 ## Color Tokens
 
 Figma color variables map to SwiftUI Color extensions or Asset Catalog named colors.

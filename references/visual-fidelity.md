@@ -2,6 +2,16 @@
 
 The process and checklist that makes SwiftUI output match the Figma design. This is the authoritative reference for "make it look like Figma".
 
+## Contents
+
+- [1. Parsing `design-context.md`](#1-parsing-design-contextmd)
+- [2. Source-of-Truth Priority](#2-source-of-truth-priority)
+- [3. Visual Inventory Template](#3-visual-inventory-template)
+- [4. SwiftUI Defaults That Break Fidelity](#4-swiftui-defaults-that-break-fidelity)
+- [5. Screenshot Cross-Check](#5-screenshot-cross-check)
+- [6. Common pre-flight checks](#6-common-pre-flight-checks)
+- [7. Hard Rules](#7-hard-rules)
+
 This file covers:
 1. How to parse `design-context.md` (the MCP response) into exact values
 2. Source-of-truth rules when multiple caches disagree

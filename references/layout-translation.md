@@ -2,6 +2,15 @@
 
 Complete reference for translating Figma layout concepts into SwiftUI code.
 
+## Contents
+
+- [Auto Layout to Stacks](#auto-layout-to-stacks)
+- [Absolute Positioning](#absolute-positioning)
+- [Scroll](#scroll)
+- [Common Patterns](#common-patterns)
+- [Effects & Decorations](#effects--decorations)
+- [Animations & Transitions](#animations--transitions)
+
 ## Auto Layout to Stacks
 
 Figma Auto Layout is the closest analog to SwiftUI stacks. The translation is mostly 1:1, but edge cases exist.

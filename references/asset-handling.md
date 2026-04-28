@@ -2,6 +2,19 @@
 
 Process Figma assets for Xcode without substituting or approximating designer-authored visuals.
 
+## Contents
+
+- [Core Rule: Figma Assets First](#core-rule-figma-assets-first)
+- [1. Build the Visual Asset Inventory](#1-build-the-visual-asset-inventory)
+- [2. Choose a Strategy](#2-choose-a-strategy)
+- [3. Download from Figma](#3-download-from-figma)
+- [4. Name and Deduplicate](#4-name-and-deduplicate)
+- [5. Add PNG Images to Asset Catalog](#5-add-png-images-to-asset-catalog)
+- [6. Choose Rendering Mode](#6-choose-rendering-mode)
+- [7. Use Assets in SwiftUI](#7-use-assets-in-swiftui)
+- [8. Final Self-Check](#8-final-self-check)
+- [Asset Rules Summary](#asset-rules-summary)
+
 ## Core Rule: Figma Assets First
 
 Every visible Figma-owned icon, logo, illustration, photo, and decorative graphic must be represented by a real Figma-rendered PNG export unless the user explicitly approves a substitution.

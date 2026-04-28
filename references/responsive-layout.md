@@ -2,6 +2,18 @@
 
 How to translate device-specific Figma frames into adaptive SwiftUI views. Complements layout-translation.md (which covers 1:1 Auto Layout mapping) with multi-device adaptation.
 
+## Contents
+
+- [When to Ask About Device Support](#when-to-ask-about-device-support)
+- [Figma Fixed Values → Adaptive SwiftUI](#figma-fixed-values--adaptive-swiftui)
+- [Size Classes for Layout Switching](#size-classes-for-layout-switching)
+- [Navigation and Sidebars](#navigation-and-sidebars)
+- [Images and Aspect Ratios](#images-and-aspect-ratios)
+- [Safe Areas by Device](#safe-areas-by-device)
+- [Typography Across Devices](#typography-across-devices)
+- [Multi-Device Implementation Pattern](#multi-device-implementation-pattern)
+- [Checklist](#checklist)
+
 ## When to Ask About Device Support
 
 - Figma frame width 375–430pt (iPhone range) and the project's deployment target includes iPad → ask the user if iPad adaptation is needed before implementing

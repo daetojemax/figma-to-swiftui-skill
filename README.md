@@ -2,7 +2,7 @@
 
 Translate Figma designs into production-ready SwiftUI code with pixel-perfect accuracy using the [Figma MCP Server](https://developers.figma.com/docs/figma-mcp-server/). Built for the [Agent Skills open format](https://agentskills.io/home).
 
-This skill provides a structured 8-step workflow that guides AI agents through fetching design context, downloading assets, and implementing native SwiftUI views — without blindly porting React + Tailwind output.
+This skill provides a structured workflow that guides AI agents through source-document review, metadata-first screen discovery, design context fetching, PNG asset export, visual fidelity checks, and native SwiftUI implementation — without blindly porting React + Tailwind output.
 
 ## Who this is for
 
@@ -14,7 +14,15 @@ This skill provides a structured 8-step workflow that guides AI agents through f
 
 ### Structured Workflow
 
-Guides the agent through 8 steps: parse Figma URL → fetch design context → capture screenshot → fetch tokens → download assets → implement in SwiftUI → validate (on user request) → register Code Connect mappings.
+Guides the agent through source document review, URL parsing, metadata-first screen discovery, design-context fetch, screenshot capture, token mapping, asset inventory/download, SwiftUI implementation, optional validation, and Code Connect registration.
+
+### Source Document First
+
+When a `.txt`, `.md`, ticket, PM brief, or inline spec is provided together with Figma work, the skill reads it before any Figma MCP call. The document defines scope, actions, async work, required states, and out-of-scope items; Figma remains the visual source of truth inside that scope.
+
+### Metadata-First Screen Discovery
+
+For root nodes, page nodes, large containers, or ambiguous multi-screen frames, the skill runs `get_metadata` before `get_design_context`. It builds a candidate screen map with confidence instead of blindly fetching a large node.
 
 ### Native SwiftUI Translation
 
@@ -28,10 +36,11 @@ Complete mapping tables for:
 
 ### Smart Asset Handling
 
-* Prefers SF Symbols over custom icons (with per-asset confirmation for cross-platform projects)
-* Downloads from MCP localhost URLs directly — no placeholders
-* Raster images to Asset Catalog with @1x/@2x/@3x variants
-* Vector assets as SVG with Preserve Vector Data
+* Uses Figma assets first — no SF Symbol substitution for Figma-designed icons, logos, or illustrations
+* Exports visible Figma-owned assets as Figma-rendered PNG by default
+* Treats SVG/XML/text responses as failed exports and re-fetches via `get_screenshot`
+* Builds a visual asset inventory before SwiftUI implementation
+* Adds PNG assets to Asset Catalog with @1x/@2x/@3x variants and correct rendering mode
 
 ### Project-Aware
 
@@ -55,12 +64,16 @@ npx skills add https://github.com/daetojemax/figma-to-swiftui-skill --skill figm
 ### Manual Install
 
 1. **Clone** this repository
-2. **Install or symlink** the `figma-to-swiftui/` folder following your tool's skills installation docs
+2. **Install or symlink** this repository folder following your tool's skills installation docs
 3. **Ensure Figma MCP server is connected** — see `references/figma-mcp-setup.md` for troubleshooting
 
 Then use in your AI agent:
 
 > Use the figma-to-swiftui skill and implement this design: https://www.figma.com/design/abc123/MyApp?node-id=10-5&m=dev
+
+With a brief:
+
+> Use the figma-to-swiftui skill. Implement this Login screen from Figma: https://www.figma.com/design/abc123/MyApp?node-id=10-5&m=dev. Also read this brief first: Sign In validates email/password, disables the CTA until valid, shows loading while submitting, shows inline auth errors, and navigates to Profile on success. Signup and reset password are out of scope.
 
 #### Where to Save Skills
 
@@ -73,18 +86,24 @@ Then use in your AI agent:
 * **Figma MCP server** connected and authenticated (see `references/figma-mcp-setup.md`)
 * **Figma URL** with a node ID — supports `/design/` and legacy `/file/` formats, with or without `www.`, `&m=dev`, etc.
 * **Xcode project** with an established SwiftUI codebase (recommended)
+* Optional **source document** (`.txt`, `.md`, ticket, PM brief, or inline spec) describing scope, actions, states, and constraints
 
 ## Skill Structure
 
 ```
-figma-to-swiftui/
-  SKILL.md                                — Main workflow (8 steps)
+figma-to-swiftui-skill/
+  SKILL.md                                — Main workflow
   references/
+    source-document.md                    — Read .txt/.md/spec before Figma; scope and behavior contract
+    screen-discovery.md                   — Metadata-first mapping for root/page/multi-screen nodes
+    fetch-strategy.md                     — Timeout-safe metadata/context strategy and dedup rules
+    visual-fidelity.md                    — Exact value extraction, visual inventory, SwiftUI pitfalls
     layout-translation.md                 — Auto Layout → Stacks, sizing, scroll, common patterns
     responsive-layout.md                  — Size classes, adaptive layouts, multi-device designs
     design-token-mapping.md               — Figma variables → Color/Font/Spacing tokens
     component-variants.md                 — Figma variants → SwiftUI styles and enums
-    asset-handling.md                      — SF Symbols, xcassets, SVG, remote images
+    asset-handling.md                      — Figma-rendered PNG assets, xcassets, remote images
+    adaptation-workflow.md                — Existing screen adaptation and diff audit
     figma-mcp-setup.md                    — MCP connection, troubleshooting
 ```
 
@@ -92,7 +111,13 @@ figma-to-swiftui/
 
 **MCP output is a spec, not code.** Figma MCP returns React + Tailwind by default. This skill treats it as a design specification and builds native SwiftUI from the extracted properties — it never ports web code.
 
-**Ask, don't assume.** The skill prompts the user for decisions it cannot safely make: validation method, SF Symbols for cross-platform projects, image loading library when none is found, whether an element is system-provided or custom.
+**Source documents define scope and behavior.** If a brief or ticket is provided, it is read before Figma. The document decides screens, actions, async behavior, required states, and out-of-scope work; Figma decides visuals.
+
+**Metadata before expensive context.** Root/page/multi-screen nodes are inspected with `get_metadata` before `get_design_context`, so the agent does not fetch an entire Figma page blindly.
+
+**Figma assets first.** Visible Figma-owned assets are exported as PNG and added to Asset Catalog. SF Symbols are allowed only for system chrome or user-approved substitutions.
+
+**Ask, don't assume.** The skill prompts the user for decisions it cannot safely make: validation method, ambiguous screen/action mapping, image loading library when none is found, whether an element is system-provided or custom.
 
 **System elements are not implemented.** Keyboards, status bars, navigation back buttons, and other iOS-provided UI that designers include for mockup context are skipped automatically.
 

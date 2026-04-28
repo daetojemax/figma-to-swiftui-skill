@@ -1,6 +1,6 @@
 ---
 name: figma-to-swiftui
-description: "Translate Figma designs into production-ready SwiftUI code with 1:1 visual fidelity using the Figma MCP workflow. Trigger when the user provides Figma URLs or node IDs and wants iOS/SwiftUI implementation, asks to implement a design or component from Figma for an iOS app, or references Figma selections in the context of an Xcode/SwiftUI project. Also trigger when user asks to inspect Figma designs for iOS planning, fetch design tokens for SwiftUI, or convert Figma assets for Xcode. Requires a working Figma MCP server connection. Do NOT trigger for web/React implementations."
+description: Convert Figma designs to SwiftUI
 ---
 
 # Figma to SwiftUI Implementation Skill
@@ -16,6 +16,7 @@ Translate Figma nodes into production-ready SwiftUI views with pixel-perfect acc
   - node-id value — the specific component or frame to implement
 - OR when using figma-desktop MCP: select a node directly in the Figma desktop app (no URL required)
 - Xcode project with an established SwiftUI codebase (preferred)
+- Optional `.txt` / `.md` / ticket / brief describing scope, behavior, actions, and states
 
 ## MCP Connection
 
@@ -28,6 +29,12 @@ If any MCP call fails because Figma MCP is not connected, pause and ask the user
 Follow these steps in order. Do not skip steps.
 
 **Two modes:** If the user wants to build a new screen from scratch, follow all steps sequentially. If the user wants to adapt/update an existing screen to match a Figma design, follow Steps 1–5, then do Step 5b (Adaptation Audit) before Step 6. Step 5b ensures every difference between the existing code and the design is identified and addressed — this is where most mistakes happen during adaptation.
+
+### Step 0 — Read Source Document (if provided)
+
+If the user provides a `.txt`, `.md`, ticket, PM brief, or inline spec together with Figma work, read it before any Figma MCP call. Extract the feature goal, expected screens, entry point, actions, async work, required states, constraints, out-of-scope items, and unclear points. See references/source-document.md.
+
+Use the extracted contract to narrow the Figma work. If the document and Figma disagree on screen count, scope, or primary action mapping, ask before fetching or implementing the wrong node.
 
 ### Step 1 — Parse the Figma URL
 
@@ -45,6 +52,12 @@ Parsing rules:
 
 When using figma-desktop MCP without a URL, tools automatically use the currently selected node. Only nodeId is needed; fileKey is inferred.
 
+### Step 1b — Screen Discovery (metadata-first when needed)
+
+Before calling `get_design_context`, decide whether the node is clearly one implementable screen/component. If the URL points to a root node, page node, large container, flow, multi-screen frame, or a source document names more screens than the URL obviously contains, run `get_metadata` first.
+
+Build a candidate screen map with confidence and continue only when the target node is clear. If multiple candidates would materially change the implementation, ask the user before fetching design context. See references/screen-discovery.md and references/fetch-strategy.md.
+
 ### Step 2 — Fetch Design Context
 
 get_design_context(fileKey=":fileKey", nodeId="1-2", prompt="generate for iOS using SwiftUI")
@@ -53,7 +66,7 @@ The `prompt` parameter steers the default code output toward SwiftUI. You can al
 
 Returns structured design data: layout, typography, colors, spacing, and a code representation. Even with an iOS prompt, treat the output as a design specification, not code to port.
 
-For large/complex designs: If the response is truncated, first run get_metadata to get a node map, identify sections and child IDs, then fetch each section individually.
+For large/complex designs: If the response is truncated or times out, do not retry the same node. Run `get_metadata`, identify smaller sections and child IDs, then fetch each section individually. See references/fetch-strategy.md.
 
 For multi-device designs: If Figma contains frames for different screen sizes (iPhone + iPad), fetch all device-specific frames, not just one. See references/responsive-layout.md for merging them into adaptive SwiftUI views.
 
@@ -69,21 +82,26 @@ get_variable_defs(fileKey=":fileKey", nodeId="1-2")
 
 Returns colors, spacing, typography tokens. Map to the project's SwiftUI design system. See references/design-token-mapping.md.
 
-### Step 5 — Download Assets
+### Step 5 — Build Asset Inventory and Download Assets
 
-The `get_design_context` response includes download URLs (localhost) for image assets in the design. Download them during the active MCP session — URLs are ephemeral.
+Before writing SwiftUI, build a visual asset inventory from the screenshot and design context. See references/asset-handling.md for the full decision flow.
 
-1. Identify assets in the `get_design_context` response (image fills, icons, illustrations)
-2. For each asset, check SF Symbols first (see references/asset-handling.md)
-3. Download remaining: `curl -o <filename> "<localhost-url>"`
-4. For icons/nodes without download URLs, use `get_screenshot(fileKey, nodeId)` to export as PNG
-5. Add to Asset Catalog — see references/asset-handling.md for Contents.json, scale variants, SVG setup
+1. Open the screenshot from Step 3 and list every visible non-text element: icons, logos, photos, illustrations, decorative artwork, and image fills
+2. Cross-check each row against `get_design_context` and `get_metadata` to find localhost URLs, image fills, vector nodes, and node IDs
+3. Classify each row as `download`, `code`, or `remote`
+4. Download Figma-owned assets during the active MCP session:
+   - Use `get_screenshot(fileKey, nodeId)` by default for icons, logos, illustrations, and artwork nodes
+   - Use localhost URLs from `get_design_context` only when they validate as PNG
+5. Validate downloaded files with `file <asset>`: visible Figma assets must be real PNG files, then add them to Asset Catalog with @1x/@2x/@3x variants and the correct rendering mode
 
 Asset rules:
+- Figma assets first: do NOT replace Figma icons, logos, or illustrations with SF Symbols or hand-drawn SwiftUI shapes
+- Visible Figma-owned assets should be exported as Figma-rendered PNG by default; SVG/text/XML responses are failed exports, not final assets
+- SF Symbols are allowed only for iOS system chrome or when the user explicitly approves substitution
+- Do NOT create placeholder images or fake logos with `Text`, `Rectangle`, `Circle`, or custom `Shape`
+- If a visible asset has no download URL and no identifiable node ID, stop and ask the user instead of improvising
 - Do NOT import new icon packages unless the project already uses them
-- Do NOT create placeholder images — always download actual assets
-- Raster images: Asset Catalog (*.xcassets) with @1x/@2x/@3x variants
-- Vector assets: SVG in Asset Catalog with Preserve Vector Data, or convert to SwiftUI Shape if simple
+- Remote content images (avatars, feeds, CDN photos) should use the project's existing image loading path, not bundled assets
 
 ### Step 5b — Adaptation Audit (when modifying an existing screen)
 
@@ -111,6 +129,14 @@ Before writing any code:
 Use whatever the project already uses. Do not introduce native SwiftUI alternatives if the project has an established library for that purpose. If the design requires something the project has no dependency for, ask the user before choosing an approach.
 
 Critical rule: MCP output (React + Tailwind) is a representation of design intent. Do NOT port React to SwiftUI. Read design properties and build native SwiftUI views from scratch.
+
+Read references/visual-fidelity.md before implementing non-trivial screens. Use it for exact value extraction, source-of-truth priority, visual inventory, SwiftUI default pitfalls, and screenshot cross-check.
+
+Asset self-check before coding:
+- Every `Image(...)` must reference a downloaded Figma asset, a remote image loaded through the project image pipeline, or an explicitly allowed system symbol
+- Every Figma icon/logo/illustration in the visual inventory must have a corresponding Asset Catalog entry or approved remote source
+- `Image(systemName:)` is not allowed for Figma-designed assets unless the user approved that substitution
+- `Text("G")`, colored shapes, custom `Shape`, or approximate vector drawings must not stand in for logos, app icons, social icons, or illustrated assets
 
 Do NOT implement system-provided elements that appear in Figma mockups. Designers often include them for context, but they are rendered by iOS automatically. Skip these:
 - Keyboard (system keyboard, emoji picker)
@@ -234,6 +260,8 @@ Reference checklist (share with user if they ask what to check):
 - Dynamic Type: text scales appropriately
 - Safe areas: no content behind notch / home indicator
 - Scroll behavior correct if design implies scrollable content
+
+For deeper visual QA, use references/visual-fidelity.md as the checklist.
 
 If deviating from Figma (accessibility, platform conventions, technical constraints), document why in comments.
 

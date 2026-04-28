@@ -1,155 +1,272 @@
 # Asset Handling for iOS/SwiftUI
 
-How to process Figma assets for use in Xcode projects.
+Process Figma assets for Xcode without substituting or approximating designer-authored visuals.
 
-## SF Symbols First
+## Core Rule: Figma Assets First
 
-Before downloading any icon from Figma, check if an equivalent SF Symbol exists.
+Every visible Figma-owned icon, logo, illustration, photo, and decorative graphic must be represented by a real Figma-rendered PNG export unless the user explicitly approves a substitution.
 
-### When to use SF Symbol instead of Figma asset:
-- Icon is a common UI element (arrow, chevron, gear, heart, share, plus, minus, checkmark, xmark, magnifyingglass, person, bell, etc.)
-- Icon closely matches an SF Symbol with minor style differences
-- Design does not require a brand-specific icon
-- **Cross-platform caveat:** If the project targets multiple platforms (e.g., Skip for iOS + Android, KMP), do NOT silently default to SF Symbols. Instead, collect all icons from the design, present the user with a list of each icon alongside the proposed SF Symbol match, and ask them to approve or reject per icon. Some icons may need platform-agnostic alternatives (e.g., custom SVGs, Material Symbols). Only use SF Symbols for icons the user explicitly approves.
+Banned substitutions:
+- `Image(systemName:)` for a Figma-designed icon
+- `Text("G")`, `Text("f")`, or similar fake logo text
+- `Rectangle`, `Circle`, or custom `Shape` standing in for a logo or icon
+- Simplified SwiftUI redraws of illustrations or complex artwork
+- Placeholder images for assets visible in the design
 
-### When to use Figma asset:
-- Brand/logo icons (app logos, company logos, social media logos)
-- Highly custom or illustrated icons not in SF Symbols
-- Icons with specific color treatments that SF Symbols cannot replicate
-- Complex multi-color illustrations
+Allowed exceptions:
+- iOS system chrome that should remain system-provided: navigation back chevron, ShareLink/share sheet icon, native tab bar symbols, alerts, keyboard, status bar, home indicator
+- User-approved substitution after you present the Figma asset and proposed SF Symbol or platform-agnostic alternative
+- Trivial UI geometry: card backgrounds, dividers, dots, simple badges, solid/gradient backgrounds
+- Remote content: user avatars, feed images, or CDN photos that are data-driven rather than bundled app assets
 
-### SF Symbol matching tips:
-- Figma "arrow right" -> Image(systemName: "arrow.right")
-- Figma "close" or "x" -> Image(systemName: "xmark")
-- Figma "settings" or "gear" -> Image(systemName: "gearshape")
-- Figma "search" -> Image(systemName: "magnifyingglass")
-- Figma "user" or "profile" -> Image(systemName: "person")
-- Figma "home" -> Image(systemName: "house")
-- Figma "notification" or "bell" -> Image(systemName: "bell")
-- Figma "menu" or "hamburger" -> Image(systemName: "line.3.horizontal")
-- Search SF Symbols app for more: https://developer.apple.com/sf-symbols/
+Cross-platform caveat: if the project targets multiple platforms (Skip, KMP, shared design system, or Android parity), do not silently use SF Symbols. Present each icon with the proposed replacement and ask the user to approve SF Symbols, custom Figma exports, or platform-agnostic alternatives.
 
-## Extracting Assets from MCP Response
+## 1. Build the Visual Asset Inventory
 
-`get_design_context` returns localhost download URLs for image assets in the design. These URLs are ephemeral — they only live while the MCP session is active. Download them immediately.
+Start from the screenshot, not the JSX-like code. List every visible non-text element before implementation.
 
-### What to look for in the response:
-- Image fills on frames (photos, illustrations, backgrounds)
-- Icons with raster content (not simple vector shapes)
-- Assets marked for export in Figma
+Use this table:
 
-### What to download vs what to code:
-- **Download:** Photos, illustrations, logos, complex multi-color icons, brand assets
-- **Code:** Simple geometric shapes, single-color icons with SF Symbol equivalents, solid fills, gradients
+| # | Purpose | Source | Node ID / URL | Strategy | Filename | Notes |
+|---|---|---|---|---|---|---|
+| 1 | Close icon | metadata | 3166:70211 | download | closeIcon | template |
+| 2 | Hero artwork | screenshot | 3166:70200 | download | onboardingHero | original |
+| 3 | Avatar photo | remote | data model | remote | n/a | use existing image loader |
+| 4 | Card background | code | n/a | code | n/a | rounded rect + gradient |
 
-### Downloading assets:
+Cross-check three sources:
+- Screenshot: ground truth for what is visible
+- `get_design_context`: localhost asset URLs, image fills, vector snippets, `imageRef`, layer names
+- `get_metadata`: node IDs for `VECTOR`, `BOOLEAN_OPERATION`, `INSTANCE`, logos, icons, and illustration frames
+
+Rules:
+- Every visible non-text element gets one row
+- If an icon/logo/illustration is visible but no node ID or URL can be found, stop and ask the user
+- Do not remove rows because an SF Symbol looks similar
+- Do not count iOS system chrome as an app asset
+
+## 2. Choose a Strategy
+
+### Download
+
+Export from Figma as PNG and bundle in Asset Catalog. Use for:
+- Icons, including common chevrons and close icons drawn in Figma
+- Logos, brand marks, social sign-in icons
+- Illustrations, hero artwork, empty-state art
+- Static photos and image fills that are part of the shipped design
+- Complex vectors, masks, blend modes, and decorative graphics
+
+### Code
+
+Draw with SwiftUI only when the element is genuinely structural UI:
+- Rounded card or button background
+- Divider line
+- Circle/dot indicator
+- Simple badge background
+- Solid color, gradient, material, border, or shadow
+
+Do not use `code` for icons just because they are geometrically simple.
+
+### Remote
+
+Use the project's existing image loading pattern for data-driven content:
+- User avatars
+- Feed/post photos
+- Product images loaded from an API
+- CDN images in real app data
+
+Check for Kingfisher, SDWebImage, Nuke, custom image cache, or existing wrappers. If no project pattern exists, ask before choosing `AsyncImage`.
+
+### Flatten vs Decompose
+
+Flatten a region into one PNG when it is static composed artwork:
+- Onboarding hero illustration
+- Empty-state scene
+- Banner with decorations, gradients, and overlaid visual effects
+- Artwork with 3+ overlapping decorative layers
+
+Decompose when elements are independently interactive, reusable, dynamic, or stateful:
+- Toolbar icon buttons
+- Tab bars
+- Form rows
+- Reusable cards
+- Icon grids
+
+Mixed regions are allowed: flatten decorative artwork, then overlay live SwiftUI text/buttons in a `ZStack`.
+
+## 3. Download from Figma
+
+Download during the active MCP session because localhost URLs are ephemeral.
+
+Priority order:
+1. `get_screenshot(fileKey, nodeId)` for individual icon/logo/illustration nodes. This is the default because it returns a Figma-rendered PNG without requiring `FIGMA_TOKEN`
+2. Localhost URLs from `get_design_context`, when present, only if they validate as PNG
+3. Figma REST images endpoint only if `FIGMA_TOKEN` is already available and batching is useful. Request `format=png&scale=3`
+
+Localhost download:
+
 ```bash
-curl -o filename.png "http://localhost:PORT/path/to/asset"
+curl -o asset-name.png "http://localhost:PORT/path/to/asset"
+file asset-name.png
 ```
 
-Download each asset as soon as you extract the URL. If a URL returns an error or times out, the session may have expired — re-run `get_design_context` for fresh URLs.
+Per-node MCP export:
 
-### Fallback — get_screenshot for individual nodes:
-If an asset has no download URL in the `get_design_context` response (e.g., a custom icon or illustration), use `get_screenshot(fileKey, nodeId)` targeting that specific node to export it as PNG.
-
-## Raster Images (PNG, JPG)
-
-### From Figma MCP localhost URL:
-1. Download the image from the localhost URL provided by MCP
-2. Generate @1x, @2x, @3x variants (if MCP provides only one size, use the highest resolution as @3x and scale down)
-3. Add to the project's Asset Catalog (Assets.xcassets)
-4. Create an imageset with all three scale variants
-5. Use in SwiftUI: Image("assetName")
-
-### Naming convention:
-- Use kebab-case or camelCase matching project convention
-- Prefix with context: "onboarding-hero", "profile-placeholder"
-- Do not use spaces or special characters
-
-### Asset Catalog structure:
+```text
+get_screenshot(fileKey=":fileKey", nodeId="3166:70211")
 ```
+
+Validation:
+- `file asset.png` must report PNG image data
+- If `file` reports SVG, XML, ASCII text, or anything other than PNG image data, treat it as a failed asset export and re-fetch via `get_screenshot`
+- Do not add SVG as the final format for visible Figma-owned assets
+- Never convert SVG to PNG locally for fidelity-critical assets; use Figma's renderer instead
+
+## 4. Name and Deduplicate
+
+Follow the project's naming convention. If none exists, use lower camel case.
+
+Naming:
+- Shared icons: `closeIcon`, `chevronRightIcon`, `searchIcon`
+- Brand/social: `googleLogo`, `appleLogo`, `companyMark`
+- Screen-specific artwork: `onboardingHeroArtwork`, `emptyStateIllustration`
+- Avoid spaces, punctuation, and raw Figma layer names like `Group 14`
+
+Deduplication:
+- Search `Assets.xcassets` before adding a new asset
+- Reuse the same Catalog image for the same source node or identical brand asset
+- One asset can be displayed at multiple SwiftUI frame sizes
+
+## 5. Add PNG Images to Asset Catalog
+
+Use a 3x source when possible, then generate 2x and 1x from the Figma display size.
+
+```bash
+cp source.png assetName@3x.png
+sips -z 48 48 source.png --out assetName@2x.png
+sips -z 24 24 source.png --out assetName@1x.png
+```
+
+Replace `48 48` and `24 24` with the actual pixel dimensions for the asset. Target sizes must match the Figma display size multiplied by scale. Example: a 24pt square icon exports to 72×72px at 3x, 48×48px at 2x, and 24×24px at 1x.
+
+PNG imageset:
+
+```text
 Assets.xcassets/
-  Images/
-    onboarding-hero.imageset/
-      onboarding-hero@1x.png
-      onboarding-hero@2x.png
-      onboarding-hero@3x.png
-      Contents.json
+  assetName.imageset/
+    assetName@1x.png
+    assetName@2x.png
+    assetName@3x.png
+    Contents.json
 ```
 
-### Contents.json for raster imageset:
+`Contents.json`:
+
 ```json
 {
   "images": [
-    { "filename": "asset-name@1x.png", "idiom": "universal", "scale": "1x" },
-    { "filename": "asset-name@2x.png", "idiom": "universal", "scale": "2x" },
-    { "filename": "asset-name@3x.png", "idiom": "universal", "scale": "3x" }
+    { "filename": "assetName@1x.png", "idiom": "universal", "scale": "1x" },
+    { "filename": "assetName@2x.png", "idiom": "universal", "scale": "2x" },
+    { "filename": "assetName@3x.png", "idiom": "universal", "scale": "3x" }
   ],
   "info": { "author": "xcode", "version": 1 }
 }
 ```
 
-### Generating scale variants with sips:
-Use the downloaded image as @3x source (highest resolution). Scale down for @2x and @1x:
-```bash
-# Example: source is 300x300 for a 100pt asset
-cp source.png asset-name@3x.png
-sips -Z 200 source.png --out asset-name@2x.png
-sips -Z 100 source.png --out asset-name@1x.png
+## 6. Choose Rendering Mode
+
+Use `template` when the asset is a single-color UI icon that should tint with SwiftUI.
+
+Template icon:
+
+```swift
+Image("closeIcon")
+    .resizable()
+    .renderingMode(.template)
+    .foregroundStyle(Color.primary)
+    .frame(width: 24, height: 24)
 ```
-The `-Z` flag scales to fit within NxN pixels while preserving aspect ratio.
 
-## Vector Assets (SVG)
+Use `original` for logos, multi-color icons, photos, and illustrations.
 
-### From Figma MCP:
-1. Download SVG from localhost URL
-2. Add to Asset Catalog as SVG (single vector)
-3. In Contents.json, set "preserves-vector-representation": true
-4. Use in SwiftUI: Image("iconName").renderingMode(.template) for tintable icons
+Original image:
 
-### Contents.json for SVG imageset:
+```swift
+Image("googleLogo")
+    .resizable()
+    .renderingMode(.original)
+    .frame(width: 24, height: 24)
+```
+
+Set template rendering in `Contents.json` when the project prefers Catalog-level rendering:
+
 ```json
 {
-  "images": [
-    { "filename": "icon-name.svg", "idiom": "universal" }
-  ],
-  "info": { "author": "xcode", "version": 1 },
-  "properties": { "preserves-vector-representation": true }
+  "properties": {
+    "template-rendering-intent": "template"
+  }
 }
 ```
 
-### When to convert SVG to SwiftUI Shape:
-- Very simple shapes (circle, rectangle, simple path with <5 control points)
-- Icons that need to animate
-- When you need fine control over stroke/fill at runtime
+## 7. Use Assets in SwiftUI
 
-### SVG to Shape conversion:
+Downloaded images should normally be explicit about sizing.
+
+Icon:
+
 ```swift
-struct CustomIcon: Shape {
-    func path(in rect: CGRect) -> Path {
-        // Convert SVG path data to SwiftUI Path
-    }
-}
+Image("searchIcon")
+    .resizable()
+    .renderingMode(.template)
+    .foregroundStyle(Color.secondary)
+    .frame(width: 20, height: 20)
 ```
 
-Only convert simple SVGs. Complex SVGs should stay as Asset Catalog resources.
+Illustration:
 
-## Remote Images
+```swift
+Image("onboardingHeroArtwork")
+    .resizable()
+    .scaledToFit()
+    .frame(maxWidth: .infinity)
+```
 
-If the design references images loaded from a URL (user avatars, feed content):
+Photo:
 
-1. Check project dependencies (Package.swift, Podfile, .xcodeproj) for an existing image loading library (Kingfisher, SDWebImage, Nuke, etc.)
-2. If found — use the project's library and follow its existing patterns in the codebase
-3. If not found — ask the user which approach to use before implementing. Do not default to AsyncImage without confirmation.
+```swift
+Image("profilePlaceholder")
+    .resizable()
+    .scaledToFill()
+    .frame(width: 64, height: 64)
+    .clipShape(Circle())
+```
 
-Do NOT download remote images as local assets.
+Rules:
+- Use `.resizable()` when setting a custom frame
+- Match the Figma display size with `.frame(width:height:)` for icons
+- Use `.scaledToFit()` for full artwork that must remain uncropped
+- Use `.scaledToFill()` plus `.clipped()` or `.clipShape()` when Figma crops the image
+- Pair template icons with `.foregroundStyle(...)`
+
+## 8. Final Self-Check
+
+Before finishing implementation:
+
+```bash
+rg 'Image\(systemName:|Text\("G"\)|Text\("f"\)|Rectangle\(\)|Circle\(\)|Shape' <generated-swift-files>
+```
+
+For every hit:
+- Keep only if it is system chrome, structural UI geometry, or an approved substitution
+- Replace Figma-designed icons/logos/illustrations with Asset Catalog images
+- Confirm every visual inventory row is represented in code, Asset Catalog, or the remote image pipeline
 
 ## Asset Rules Summary
 
-1. SF Symbols first for standard UI icons
-2. Download from MCP localhost URLs directly (no placeholders ever)
-3. Raster images: @1x/@2x/@3x in Asset Catalog
-4. Vector icons: SVG in Asset Catalog with Preserve Vector Data
-5. Remote images: use project's image loading library, ask user if none found
-6. Do NOT add new icon library dependencies
-7. Match project naming conventions for all assets
+1. Figma assets first; SF Symbols only by exception
+2. Build a visual inventory before SwiftUI implementation
+3. Download icons, logos, illustrations, and static image fills from Figma
+4. Code only structural UI geometry, gradients, materials, and simple backgrounds
+5. Use remote loading only for data-driven content images
+6. Validate file formats before adding assets to Xcode
+7. Match scale variants, rendering mode, and project naming conventions

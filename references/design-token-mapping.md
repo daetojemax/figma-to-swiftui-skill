@@ -1,6 +1,6 @@
 # Figma Design Tokens to SwiftUI Mapping
 
-How to translate Figma variables (from get_variable_defs) into a SwiftUI design system.
+Use this reference to map Figma variables and styles into the project's SwiftUI tokens. Examples illustrate structure; their values are not defaults to impose on a design.
 
 ## Contents
 
@@ -20,7 +20,7 @@ Figma color variables map to SwiftUI Color extensions or Asset Catalog named col
 ### Strategy
 
 1. Check if project already has a color system (Color+Extensions.swift, Theme.swift, or Asset Catalog named colors)
-2. If yes: map Figma variable names to existing project colors by matching values
+2. If yes: map by semantic role and active mode, then verify the values match the design
 3. If no: create Color extensions or Asset Catalog entries from Figma variables
 4. Prefer semantic colors and named assets already used by adjacent screens before introducing a new token
 
@@ -78,28 +78,22 @@ Figma typography variables map to Font definitions. Typography is a common sourc
 | font-size | `size:` parameter |
 | font-weight | `weight:` parameter |
 | font-width (Expanded/Condensed) | `.fontWidth(.expanded)` / `.fontWidth(.condensed)` (iOS 16+) |
-| line-height | `.lineSpacing(lineHeight - fontSize)` — see pitfall below |
+| line-height | Preserve the intended line box using the project's typography support and measured font metrics; see below |
 | letter-spacing | `.tracking(X)` preferred, `.kerning(X)` only when project uses it |
 | text-align | `.multilineTextAlignment(.leading / .center / .trailing)` |
 | text-transform: uppercase | `.textCase(.uppercase)` or uppercase localized copy |
 
 ### Line Height Pitfall
 
-Figma `line-height: 22px` on a `16px` font means a 22pt total line box. SwiftUI `Text` has its own default line height, so size + weight alone is not enough.
+Figma line height describes the total line box. SwiftUI `lineSpacing` describes spacing between line fragments, so subtracting font size from the target line height is not a general conversion. Font metrics, including leading, affect the result.
 
-```swift
-Text("...")
-    .font(.system(size: 16, weight: .semibold))
-    .lineSpacing(22 - 16)
-```
-
-If the resulting block over-pads vertically, compensate in the container rather than silently dropping line height. Never skip line height when Figma specifies it.
+Use existing typography helpers when they support the required line height. Otherwise choose a text rendering approach based on the actual font metrics and compare a multiline render. Do not apply negative padding as a universal correction. See Apple's [lineSpacing documentation](https://developer.apple.com/documentation/swiftui/view/linespacing(_:)).
 
 ### Letter Spacing Pitfall
 
-Figma `letter-spacing: -0.32px` maps to `.tracking(-0.32)`. Prefer `.tracking()` for Figma tracking because it respects font ligatures; `.kerning()` applies raw spacing between characters.
+For a design using point-equivalent units, `letter-spacing: -0.32px` maps to `.tracking(-0.32)`. Convert percentage or em values using the font size rather than treating them as points. Follow project typography helpers where they already encode tracking.
 
-### Example — Full Style Carry-Over
+### Example — Font, Width, and Tracking
 
 ```swift
 extension Font {
@@ -110,17 +104,13 @@ Text("Title")
     .font(.headingLarge)
     .fontWidth(.expanded)
     .tracking(-0.56)
-    .lineSpacing(34 - 28)
     .foregroundStyle(Color("textPrimary"))
     .multilineTextAlignment(.leading)
 ```
 
 ### Custom Fonts
 
-If Figma uses a custom font (e.g., Inter, SF Pro Rounded):
-1. Check if font is already added to the Xcode project (Info.plist UIAppFonts)
-2. If not, download and add the font files
-3. Use Font.custom("FontName", size:) instead of .system()
+Check existing bundled fonts and system font designs before adding font files. For a required custom family, use available project assets or an authorized source and the correct registered font name. If the font is unavailable, identify that limitation instead of silently substituting a visually different family. Do not treat an Apple system font design as a third-party download.
 
 If the project already provides typography helpers or wrappers, use those first instead of introducing raw font declarations or a parallel typography layer.
 
@@ -202,8 +192,9 @@ Radial gradient -> `RadialGradient`. Angular/conic gradient -> `AngularGradient`
 ## General Rules
 
 1. Always check project for existing design system before creating new tokens
-2. Match by value first (hex color, px value), then by semantic name
+2. Match semantic role and mode, then verify values; equal colors can serve different roles
 3. If project tokens exist but names differ from Figma, use project names
 4. Do not duplicate: one source of truth for each token
 5. Prefer existing shared modules and helpers, theme wrappers, and Asset Catalog colors when they already express the same intent
 6. Group tokens logically (Color, Spacing, Typography, Radius, Shadow)
+7. Resolve a mismatched token with a scoped variant or clarification; do not change a shared token globally just to align one screen

@@ -1,272 +1,37 @@
-# Figma Component Variants to SwiftUI
+# Component Variants
 
-How to translate Figma variant properties (State, Size, Style/Type, content toggles) into SwiftUI constructs.
+Inspect the variants used by the requested screen and any states its behavior requires. Fetch siblings only when they answer a concrete question; a component set can contain many unrelated permutations.
 
-## Contents
+Follow the existing component API when it supports the design. Otherwise choose a representation based on how the variants differ; routine API choices do not require user approval.
 
-- [Identifying Variants in MCP Output](#identifying-variants-in-mcp-output)
-- [State Variants](#state-variants)
-- [Size Variants](#size-variants)
-- [Style / Type Variants](#style--type-variants)
-- [Content Toggle Variants](#content-toggle-variants)
-- [Combined Variants](#combined-variants)
-- [Ask Before Choosing Architecture](#ask-before-choosing-architecture)
-- [Reusable Component Pattern](#reusable-component-pattern)
-- [Forms and Inputs](#forms-and-inputs)
-- [Variant Implementation Checklist](#variant-implementation-checklist)
+## State
 
-## Identifying Variants in MCP Output
+| Figma state | SwiftUI mechanism |
+|---|---|
+| Pressed | `configuration.isPressed` in `ButtonStyle` |
+| Disabled | `.disabled(...)` and the `isEnabled` environment |
+| Toggle on/off | A binding or `ToggleStyle.Configuration.isOn` |
+| Focused | `@FocusState` |
+| Selected | The control's selection binding |
+| Loading, error, empty, success | Existing model state, or a scoped enum when useful |
 
-Figma components use variant properties to define visual permutations. When `get_design_context` returns a component instance, look for:
-- Property names like State, Size, Style, Type, HasIcon, ShowSubtitle
-- Multiple variant values (e.g., State=Default, Pressed, Disabled, Loading)
+Preserve control semantics. For example, a loading overlay must not leave duplicate submissions enabled: disable the action at the control/model boundary as appropriate, including keyboard and accessibility activation. Avoid separate state that can drift from the app's actual request state.
 
-Fetch all variants of a component set, not just the default. Use `get_metadata` to find sibling variant nodes, then `get_design_context` on each to understand the full range of visual states.
+## Size, style, and content
 
-## State Variants
+- Use system control sizes when they provide the desired behavior. A custom style must explicitly honor any size input it needs.
+- Use a style enum when differences are limited to colors, borders, or typography; separate components or styles can be clearer when structure differs substantially.
+- Model simple optional content with optional values, such as an icon or subtitle. Use view-builder slots when the content's structure varies.
+- Do not add every possible size/style/state combination to a component used for one specific variant.
 
-Map Figma state variants to the closest native SwiftUI mechanism. Only create custom state enums for states that have no system equivalent.
-
-### System-provided states (use these first):
-
-- Pressed -> `configuration.isPressed` inside `ButtonStyle.makeBody(configuration:)`
-- Disabled -> `@Environment(\.isEnabled)` in the style, or `.disabled(true)` on the call site
-- On/Off (toggle) -> `configuration.isOn` inside `ToggleStyle`
-- Focused -> `@FocusState` and `.focused()` modifier
-- Selected (in a list/picker) -> Selection binding in List/Picker
-
-### Custom states (no system equivalent):
-
-- Loading, Error, Empty, Skeleton -> Model as an enum, drive with @State or view model
+For example, an existing project button might be used as:
 
 ```swift
-enum ButtonLoadingState {
-    case idle, loading, success, error
-}
-
-struct PrimaryButtonStyle: ButtonStyle {
-    let loadingState: ButtonLoadingState
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
-            .opacity(isEnabled ? 1.0 : 0.5)
-            .overlay {
-                if loadingState == .loading {
-                    ProgressView()
-                }
-            }
-            .allowsHitTesting(loadingState != .loading)
-    }
-}
+Button("Continue", action: submit)
+    .buttonStyle(AppButtonStyle(variant: .primary, size: .large))
+    .disabled(isSubmitting || !isValid)
 ```
 
-Rule: if a Figma state matches a system state (pressed, disabled, on/off, focused), use the system mechanism. Custom enum only for states the system does not provide.
+The names and parameters here are illustrative; use the actual project API and design values. Loading appearance, when required, should be driven by the same `isSubmitting` state.
 
-## Size Variants
-
-### System control sizes:
-
-`.controlSize(.mini / .small / .regular / .large / .extraLarge)` works for system controls (Button, Toggle, Picker, DatePicker, etc.) but has no effect on custom views.
-
-### Custom size enum (for custom components):
-
-```swift
-enum ComponentSize {
-    case small, medium, large
-}
-
-struct PrimaryButtonStyle: ButtonStyle {
-    let size: ComponentSize
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(fontSize)
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-    }
-
-    private var fontSize: Font {
-        switch size {
-        case .small: .footnote
-        case .medium: .body
-        case .large: .title3
-        }
-    }
-
-    private var horizontalPadding: CGFloat {
-        switch size {
-        case .small: 12
-        case .medium: 16
-        case .large: 20
-        }
-    }
-
-    private var verticalPadding: CGFloat {
-        switch size {
-        case .small: 6
-        case .medium: 10
-        case .large: 14
-        }
-    }
-}
-```
-
-Rule: use `.controlSize()` when the component wraps a system control. Use a custom enum when building a fully custom component.
-
-## Style/Type Variants
-
-Figma designs often have Style or Type properties (Primary, Secondary, Destructive, Ghost, etc.).
-
-### One style with enum parameter — when differences are minimal (colors, borders):
-
-```swift
-enum ButtonVariant {
-    case primary, secondary, destructive
-}
-
-struct AppButtonStyle: ButtonStyle {
-    let variant: ButtonVariant
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(foregroundColor)
-            .background(backgroundColor)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderColor, lineWidth: variant == .secondary ? 1 : 0)
-            }
-    }
-
-    private var foregroundColor: Color { /* switch on variant */ }
-    private var backgroundColor: Color { /* switch on variant */ }
-    private var borderColor: Color { /* switch on variant */ }
-}
-```
-
-### Separate styles — when layout or structure differs significantly:
-
-```swift
-struct FloatingButtonStyle: ButtonStyle { /* icon-only, circular, shadow */ }
-struct TextLinkButtonStyle: ButtonStyle { /* underlined text, no background */ }
-```
-
-Rule: prefer one style with an enum parameter when the only differences are colors, borders, or font weights. Use separate styles when layout, structure, or content arrangement differs.
-
-## Content Toggles
-
-Figma variants like HasIcon=true/false, ShowSubtitle=true/false, ShowBadge=true/false represent optional content slots.
-
-### Optional parameters:
-
-```swift
-struct CardView: View {
-    let title: String
-    var subtitle: String? = nil
-    var icon: Image? = nil
-    var badge: Int? = nil
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let icon { icon.frame(width: 24, height: 24) }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                if let subtitle { Text(subtitle).font(.subheadline).foregroundStyle(.secondary) }
-            }
-            Spacer()
-            if let badge { Text("\(badge)").font(.caption).padding(4).background(.red, in: .capsule) }
-        }
-    }
-}
-```
-
-### @ViewBuilder for flexible content slots:
-
-```swift
-struct CardView<Header: View, Footer: View>: View {
-    let title: String
-    @ViewBuilder let header: Header
-    @ViewBuilder let footer: Footer
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            Text(title).font(.headline)
-            footer
-        }
-    }
-}
-```
-
-Rule: use optional parameters for simple toggles (icon, subtitle, badge). Use @ViewBuilder generics when the slot content varies significantly in structure.
-
-## Full Example: Button with State + Size + Style
-
-Combining all variant dimensions into a single component:
-
-```swift
-struct AppButtonStyle: ButtonStyle {
-    let variant: ButtonVariant
-    let size: ComponentSize
-    let loadingState: ButtonLoadingState
-
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(size.font)
-            .padding(.horizontal, size.horizontalPadding)
-            .padding(.vertical, size.verticalPadding)
-            .foregroundStyle(variant.foregroundColor)
-            .background(variant.backgroundColor, in: RoundedRectangle(cornerRadius: size.cornerRadius))
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
-            .opacity(isEnabled ? 1.0 : 0.5)
-            .overlay {
-                if loadingState == .loading {
-                    ProgressView().tint(variant.foregroundColor)
-                }
-            }
-            .allowsHitTesting(loadingState != .loading)
-    }
-}
-
-// Usage
-Button("Submit") { submit() }
-    .buttonStyle(AppButtonStyle(variant: .primary, size: .large, loadingState: viewModel.submitState))
-    .disabled(viewModel.isFormInvalid)
-```
-
-## Full Example: Text Field with State Variants
-
-```swift
-struct AppTextField: View {
-    let placeholder: String
-    @Binding var text: String
-    var error: String? = nil
-    @FocusState private var isFocused: Bool
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TextField(placeholder, text: $text)
-                .focused($isFocused)
-                .padding(12)
-                .background(isEnabled ? Color(.systemBackground) : Color(.secondarySystemBackground))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(borderColor, lineWidth: isFocused || error != nil ? 2 : 1)
-                }
-            if let error {
-                Text(error).font(.caption).foregroundStyle(.red)
-            }
-        }
-    }
-
-    private var borderColor: Color {
-        if error != nil { return .red }
-        if isFocused { return .accentColor }
-        return Color(.separator)
-    }
-}
-```
+For a component-library task, cover the requested public variants and their interactions. For a screen task, cover the variants that screen needs. Check long labels, optional content, and disabled/loading behavior where they affect the implementation.

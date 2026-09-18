@@ -1,85 +1,30 @@
-# Fetch Strategy
+# Figma Fetch Strategy
 
-Rules for calling Figma MCP tools in a way that avoids timeouts, minimizes wasted tokens, and keeps work resumable enough for practical use.
+Use the connected server's tool schemas. Tool availability and parameters vary; names below describe capabilities, not a fixed call sequence.
 
-## Core Principles
+## Select the smallest useful call
 
-1. **Metadata before context**: `get_design_context` is the expensive, timeout-prone call. Do not call it on a node unless you are confident it is a single implementable unit.
-2. **Narrow with the source document first**: when a brief or ticket exists, use its screen list and out-of-scope notes to decide which Figma nodes matter.
-3. **Deduplicate by file and node**: `get_variable_defs` is per `fileKey`; assets are per source node ID.
-4. **Split instead of retrying blindly**: if context is too large or truncated, use metadata to fetch smaller meaningful sections.
+| Need | Tool, when available |
+|---|---|
+| Layout and styling for a known screen/component | `get_design_context` |
+| Locate frames or split a large selection | `get_metadata` |
+| Inspect appearance | `get_screenshot` |
+| Resolve variables/styles used by the selected nodes | `get_variable_defs` |
+| Find existing code components | `get_code_connect_map` |
+| Obtain export files | `download_assets` or node screenshot; see [asset-handling.md](asset-handling.md) |
 
-## Metadata-First Decision Tree
+Request SwiftUI through supported framework/language hints. Do not invent a `prompt` argument. For Code Connect, use the project's SwiftUI mapping label when the tool exposes framework selection.
 
-```text
-Input node
-├── Clearly one screen/component
-│   └── Fetch design context directly
-├── Root / page / probably multi-screen container
-│   └── Run get_metadata first
-│       ├── One clear child screen -> retarget to that child
-│       └── Multiple candidates -> build screen map and ask if ambiguous
-└── Unknown
-    └── Run get_metadata first
-```
+## Recover from oversized context
 
-## When to Force Screen Discovery
+When a response is truncated or a heavy selection times out, inspect metadata and fetch meaningful child sections. Preserve the parent layout relationships when composing them. Do not retry the unchanged oversized request. A transient connection failure can justify a retry after addressing its cause; repeated failure should lead to another supported route or a specific blocker report.
 
-Run `get_metadata` before `get_design_context` when:
-- node ID is file-level/root-like, such as `0:1`
-- node name contains `Page`, `Flow`, `Onboarding`, `All Screens`, `Desktop`, `iPhone & iPad`
-- the node has many direct children or deep nesting
-- the user provided a root/page URL
-- the source document names more screens than the URL obviously contains
+## Reuse evidence with its scope
 
-See references/screen-discovery.md for the candidate mapping format.
+Reuse current context and screenshots for the same file, node, and variant. Cache only when useful for the task; no particular cache directory or document format is required.
 
-## Circuit Breaker for Large or Truncated Context
+Variables returned for a selection are not necessarily a complete file-wide token catalog. Reuse known definitions, but fetch missing variables or modes when another screen requires them. Deduplicate assets by file, source node, and relevant export settings; different modes, variants, or scales can require different exports.
 
-If `get_design_context` times out or returns truncated output:
+Fetch device and state variants that the request or existing app requires. Do not enumerate every sibling or component permutation by default.
 
-1. Do not retry the same node with the same parameters.
-2. Run `get_metadata` on that node.
-3. Pick the smallest meaningful child that matches the target section.
-4. Fetch `get_design_context` on that child.
-5. If still too large, split into sections such as header, body, footer, cards, or modal content.
-6. Tell the user when you split a screen so they understand why multiple node contexts are used.
-
-## Deduplicate Token Fetches
-
-`get_variable_defs(fileKey, nodeId)` returns file-scoped variables. If multiple screens come from the same `fileKey`, fetch variables once and reuse the result for the remaining screens.
-
-Do not call `get_variable_defs` once per screen when all screens share the same Figma file.
-
-## Deduplicate Assets by Source Node
-
-When the same icon or illustration source node appears on multiple screens, fetch it once and reuse it.
-
-Recommended cache shape:
-
-```text
-.figma-cache/
-  _shared/assets/
-    3166_70211.png
-    3166_70211.meta.json
-```
-
-Use the source node ID as the stable key, replacing `:` with `_` for filenames.
-
-## Call Budget Sanity Check
-
-For a single screen, the normal pattern is:
-- `get_metadata`: 0-1 before context, plus 1 if context times out or assets need node IDs
-- `get_design_context`: 1 per screen, plus section calls only after split
-- `get_screenshot`: 1 for the screen plus one per flattened region or icon asset
-- `get_variable_defs`: 1 per `fileKey`
-- Code Connect lookup: optional, only if the MCP server exposes it
-
-Exceeding this is a signal to stop and re-plan instead of continuing blind fetches.
-
-## What Not to Do
-
-- Do not call `get_design_context` on a root/page/flow container just to see what is there.
-- Do not retry a timed-out context call with the same node.
-- Do not refetch variables for every screen in the same Figma file.
-- Do not skip asset node deduplication when the same icon appears repeatedly.
+Tool behavior reference: [Figma MCP tools and prompts](https://developers.figma.com/docs/figma-mcp-server/tools-and-prompts/).

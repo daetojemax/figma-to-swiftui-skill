@@ -1,6 +1,6 @@
 # Figma Layout to SwiftUI Translation
 
-Complete reference for translating Figma layout concepts into SwiftUI code.
+Reference for translating Figma layout intent into native SwiftUI. Examples illustrate patterns; use the actual design values and supported project APIs.
 
 ## Contents
 
@@ -13,7 +13,7 @@ Complete reference for translating Figma layout concepts into SwiftUI code.
 
 ## Auto Layout to Stacks
 
-Figma Auto Layout is the closest analog to SwiftUI stacks. The translation is mostly 1:1, but edge cases exist.
+Figma Auto Layout is the closest analog to SwiftUI stacks. The layout intent transfers, but SwiftUI's proposal and sizing behavior can differ.
 
 ### Direction
 
@@ -63,7 +63,7 @@ content
     .padding(16)
 ```
 
-**Figma text-layer padding is not always real padding:** Figma sometimes encodes vertical centering as top/bottom padding. When a Text layer has padding top=4, bottom=4 and line-height != font-size, this is usually the text line box, not container padding. Do not double-apply it. See references/visual-fidelity.md for line-height handling.
+**Text bounds can differ from container padding.** Inspect the text line box and parent layout before treating apparent vertical whitespace as an additional inset. See [visual-fidelity.md](visual-fidelity.md) for typography and rendering differences.
 
 ### Sizing
 
@@ -88,13 +88,13 @@ Figma sizing modes:
 Figma frames without auto layout use absolute (x, y) positioning.
 
 - Prefer translating to stacks when the visual structure allows it
-- When absolute positioning is necessary, use ZStack with .offset(x:, y:)
+- When absolute positioning is necessary, use an aligned ZStack and account for child bounds; `.offset` moves the rendered view without changing its layout footprint
 - For responsive absolute layouts, use GeometryReader (sparingly)
 - Figma constraints (pin left, pin top, etc.) -> combine .frame() with alignment parameters in the parent
 
 ## Scroll
 
-- Figma frame with "Clip content" + overflow -> ScrollView
+- Confirm scrolling from prototype behavior or the brief; clipping alone can describe a static crop
 - Vertical scroll -> ScrollView(.vertical) { VStack { ... } }
 - Horizontal scroll -> ScrollView(.horizontal) { HStack { ... } }
 - Both directions -> ScrollView([.vertical, .horizontal]) { ... }
@@ -132,24 +132,24 @@ Figma: Frame (auto layout horizontal, space between, padding 16)
 SwiftUI: Prefer .navigationTitle() + .toolbar {} over custom header when possible. Custom header only if design is significantly non-standard.
 
 ### Bottom Safe Area Content
-Figma: Frame pinned to bottom with padding
+Figma: An action area pinned above the bottom safe area while content can scroll
 SwiftUI:
 ```swift
-VStack {
-    Spacer()
+ScrollView {
     content
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
 }
-.safeAreaInset(edge: .bottom) { ... }
-// or use .toolbar(.bottomBar)
+.safeAreaInset(edge: .bottom) {
+    bottomActions
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+}
 ```
 
 ## Effects & Decorations
 
 | Figma | SwiftUI |
 |---|---|
-| Drop shadow | `.shadow(color:, radius:, x:, y:)` — use full form; defaults are wrong |
+| Drop shadow | `.shadow(color:, radius:, x:, y:)` — supply the design's color and offsets |
 | Inner shadow | `.overlay { RoundedRectangle(...).stroke(...).blur(...) }` or custom drawing |
 | Layer blur | `.blur(radius:)` |
 | Background blur | `.background(.ultraThinMaterial)` / `.regularMaterial` / `.thickMaterial` |
@@ -174,6 +174,6 @@ Figma prototype connections describe transition intent, not literal animation sp
 | Scroll animate | `ScrollView` + `.scrollTransition()` when supported |
 
 Rules:
-- Check project dependencies for Lottie or another animation library and use it if already present
+- Reuse the project's animation pipeline for matching assets or behaviors; a dependency's presence does not require it for every transition
 - Do not over-animate; prototype links usually mean navigation, not custom animation
-- For complex choreographed animations, ask whether to implement fully or simplify
+- For specified choreography, preserve its timing and state relationships. Ask about scope only when required motion is unclear or a proposed simplification would change it

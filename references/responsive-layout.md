@@ -1,25 +1,12 @@
 # Figma to Responsive SwiftUI Layout
 
-How to translate device-specific Figma frames into adaptive SwiftUI views. Complements layout-translation.md (which covers 1:1 Auto Layout mapping) with multi-device adaptation.
+Use this reference when supported container sizes need different layouts. See [layout-translation.md](layout-translation.md) for the base layout mapping.
 
-## Contents
+## Establish device scope
 
-- [When to Ask About Device Support](#when-to-ask-about-device-support)
-- [Figma Fixed Values → Adaptive SwiftUI](#figma-fixed-values--adaptive-swiftui)
-- [Size Classes for Layout Switching](#size-classes-for-layout-switching)
-- [Navigation and Sidebars](#navigation-and-sidebars)
-- [Images and Aspect Ratios](#images-and-aspect-ratios)
-- [Safe Areas by Device](#safe-areas-by-device)
-- [Typography Across Devices](#typography-across-devices)
-- [Multi-Device Implementation Pattern](#multi-device-implementation-pattern)
-- [Checklist](#checklist)
+Use the request and the app's existing device support. Preserve adaptive behavior already provided by the app; a single iPhone mockup does not require a new iPad design or a routine clarification.
 
-## When to Ask About Device Support
-
-- Figma frame width 375–430pt (iPhone range) and the project's deployment target includes iPad → ask the user if iPad adaptation is needed before implementing
-- Figma contains multiple frames for different devices (iPhone + iPad) → fetch all frames via get_design_context + get_screenshot, then ask the user how to combine them
-- Figma frame width 744–1024pt (iPad range) only → ask if iPhone support is needed
-- Do not assume. Always confirm device scope with the user.
+Fetch relevant device variants when the task includes them. Ask only if the required layouts cannot be inferred and the choice would materially change the feature. Do not fetch every device frame merely because it exists in the file.
 
 ## Figma Fixed Values → Adaptive SwiftUI
 
@@ -32,16 +19,15 @@ Figma designs use absolute pixel values. Not all of them should become fixed fra
 → Keep `.frame(width:, height:)` — these are intentionally fixed
 
 **Content containers with fixed width**
-→ Replace with relative sizing. Use `containerRelativeFrame` (iOS 17+) or `GeometryReader` for proportional widths:
+→ Infer whether the width represents edge insets, a maximum content width, or a true proportion. A 343pt card in a 375pt frame often means 16pt margins, not a width of 91.5% on every device. Use flexible width plus padding for fixed margins. Use `containerRelativeFrame` (iOS 17+) or `GeometryReader` when the design actually specifies a proportion:
 ```swift
-// Figma: card width 343 in 375pt frame (91.5% of screen)
+// Only when the design calls for a proportional width.
 .containerRelativeFrame(.horizontal) { length, _ in
     length * 0.915
 }
 ```
 
-**Banned: `UIScreen.main.bounds`**
-→ Always use `containerRelativeFrame` (iOS 17+) or `GeometryReader`. Screen bounds breaks in Split View, Slide Over, and Stage Manager.
+Measure the available container instead of using `UIScreen.main.bounds` for layout. The screen size does not describe a window in Split View or Stage Manager; flexible stacks often avoid explicit measurement entirely.
 
 ## Size Classes for Layout Switching
 
@@ -80,12 +66,12 @@ When NOT to use size classes:
 
 ## Merging iPhone + iPad Figma Frames
 
-When Figma provides separate frames for iPhone and iPad:
+When the requested device scope includes separate iPhone and iPad frames:
 
 1. Fetch both frames via get_design_context + get_screenshot
 2. Identify shared components (same content, same structure) → extract into shared views
 3. Identify differences (layout changes, visibility changes, different arrangements)
-4. Implement one SwiftUI view that switches on `horizontalSizeClass`
+4. Share content and state; choose size classes or available-width layout based on the differences
 
 ```swift
 struct ProfileView: View {
